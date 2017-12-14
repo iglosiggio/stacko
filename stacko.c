@@ -44,7 +44,7 @@ void printprog(stkProg);
 
 stkFun* findsymbol(const char*);
 
-stkProg parse(const char*);
+stkProg parse(const char*, stkProg);
 
 void die(const char*);
 char* findendqstr(const char*);
@@ -74,9 +74,10 @@ void tonumber(stk*);
 stkProg progalloc(const char*);
 stkVal* valalloc(stkProg*);
 void* heapalloc(stkProg*, size_t);
+stkProg heapprogalloc(stkProg*, const char*);
 stk stkalloc(size_t);
 
-stkFun libstacko[] = {
+const stkFun libstacko[] = {
 	/*exposed name   internal symbol*/
 	{ "pop",                     pop },
 	{ "clear",                 clear },
@@ -108,6 +109,9 @@ stkFun libstacko[] = {
 #define PROG(val) (stkVal) { .type = PROG,   .p = (val) }
 #define END()     (stkVal) { .type = END }
 
+#define NULLPROG (stkProg) { NULL }
+#define ISNULLPROG(prog) (prog).start == NULL
+
 int main(int argc, const char* argv[]) {
 	stk stack;
 	stkProg program;
@@ -125,7 +129,7 @@ int main(int argc, const char* argv[]) {
 	puts("-----------------");
 	puts("     PARSING     ");
 	puts("-----------------");
-	program = parse(argv[1]);
+	program = parse(argv[1], NULLPROG);
 	printprog(program);
 	puts("");
 	puts("-----------------");
@@ -159,9 +163,10 @@ void printprog(stkProg program) {
 	}
 }
 
-stkProg parse(const char* source) {
+stkProg parse(const char* source, stkProg prog) {
 	const char* parsing = source;
-	stkProg prog = progalloc(source);
+	if(ISNULLPROG(prog))
+		prog = progalloc(source);
 
 	while(*parsing != '\0') {
 		double num;
@@ -190,7 +195,7 @@ stkProg parse(const char* source) {
 			memcpy(progstr, parsing+1, progsiz);
 			progstr[progsiz] = '\0';
 			parsing = parsed + 1;
-			*valalloc(&prog) = PROG(parse(progstr));
+			*valalloc(&prog) = PROG(parse(progstr, heapprogalloc(&prog, progstr)));
 			continue;
 		}
 		if(*parsing == ' '
@@ -483,6 +488,12 @@ stkVal* valalloc(stkProg* program) {
 
 void* heapalloc(stkProg* program, size_t size) {
 	return program->cheap = program->cheap - size;
+}
+
+stkProg heapprogalloc(stkProg* program, const char* source) {
+	size_t size = (strlen(source) / 2 + 2) * sizeof(stkVal);
+	void* mem = heapalloc(program, size);
+	return (stkProg) { .start = mem, .lastval = mem, .end = mem+size, .cheap = mem+size };
 }
 
 stk stkalloc(size_t values) {

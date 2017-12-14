@@ -53,6 +53,7 @@ void pop(stk*);
 void clear(stk*);
 void length(stk*);
 void print(stk*);
+void printstack(stk*);
 void halt(stk*);
 void stackoif(stk*);
 void stackoifelse(stk*);
@@ -60,6 +61,7 @@ void exec(stk*);
 void dup(stk*);
 void exch(stk*);
 void find(stk*);
+void roll(stk*);
 void add(stk*);
 void substract(stk*);
 void equal(stk*);
@@ -75,6 +77,7 @@ stkFun libstacko[] = {
 	{ "clear",                 clear },
 	{ "length",               length },
 	{ "print",                 print },
+	{ "stack",            printstack },
 	{ "halt",                   halt },
 	{ "if",                 stackoif },
 	{ "ifelse",         stackoifelse },
@@ -82,6 +85,7 @@ stkFun libstacko[] = {
 	{ "dup",                     dup },
 	{ "exch",                   exch },
 	{ "find",                   find },
+	{ "roll",                   roll },
 	{ "+",                       add },
 	{ "-",                 substract },
 	{ "=",                     equal },
@@ -89,61 +93,38 @@ stkFun libstacko[] = {
 };
 
 /* TODO: usar el field .fn */
-#define FN(val) (stkVal) { .type = FN, .s = (val) }
-#define NUM(val) (stkVal) { .type = NUMBER, .n = (val) }
-#define STR(val) (stkVal) { .type = STRING, .s = (val) }
-#define PROG(val) (stkVal) { .type = PROG, .p = (val) }
-#define END() (stkVal) { .type = END }
+#define FN(val)   (stkVal) { .type = FN,     .s = (val) }
+#define NUM(val)  (stkVal) { .type = NUMBER, .n = (val) }
+#define STR(val)  (stkVal) { .type = STRING, .s = (val) }
+#define PROG(val) (stkVal) { .type = PROG,   .p = (val) }
+#define END()     (stkVal) { .type = END }
 
 int main(int argc, const char* argv[]) {
 	stk stack;
-	stkProg testProgram;
-	int i = 1;
+	stkProg program;
 
-	for(; i < argc; i++) {
-		puts(argv[i]);
+	if(argc < 1) {
+		puts("No programo given");
+		return 0;
 	}
 
-	stack = stkalloc(1024);
-
-	push(STR("TESTSTRING"), &stack);
-	push(NUM(4), &stack);
-	push(NUM(5), &stack);
-	add(&stack);
-	length(&stack);
-	print(&stack);
-	push(NUM(9999999), &stack);
-	pop(&stack);
-	print(&stack);
-	print(&stack);
-
-	testProgram = parse("333333 4 + 7        - \"test str\" print print 1 { 4 5 7 33 { } } if \"aaa\\\"\" \"\"");
-	*valalloc(&testProgram) = FN("halt");
-	printprog(testProgram);
-
-	puts("----");
-	puts("PROGRAM");
-	puts("1 2 + print \"hola mundo\" print");
-	puts("----");
-	puts("PARSING");
-	testProgram = parse("1 2 + print \"hola mundo\" print { \"tengo funciones\" print } exec");
-	printprog(testProgram);
-	puts("----");
+	puts("-----------------");
+	puts("     PROGRAM     ");
+	puts("-----------------");
+	puts(argv[1]);
+	puts("");
+	puts("-----------------");
+	puts("     PARSING     ");
+	puts("-----------------");
+	program = parse(argv[1]);
+	printprog(program);
+	puts("");
+	puts("-----------------");
 	puts("PROGRAM EXECUTION");
-	stack = stkalloc(512);
-	interpret(testProgram, &stack);
-
-	puts("----");
-	puts("PROGRAM");
-	puts("{ 1 - dup print \"hola!!\" print 1 find 1 find {exec} exch if } dup 7 exch exec");
-	puts("----");
-	puts("PARSING");
-	testProgram = parse("{ 1 - dup print \"hola!!\" print 1 find 1 find {exec} exch if } dup 7 exch exec");
-	printprog(testProgram);
-	puts("----");
-	puts("PROGRAM EXECUTION");
-	stack = stkalloc(512);
-	interpret(testProgram, &stack);
+	puts("-----------------");
+	stack = stkalloc(2048);
+	interpret(program, &stack);
+	puts("");
 
 	return 0;
 }
@@ -153,10 +134,10 @@ void printprog(stkProg program) {
 	for(; val != program.lastval; val++)
 	switch(val->type) {
 	case NUMBER:
-		printf("NUMBER: %f\n", val->n);
+		printf("PUSH %f\n", val->n);
 		break;
 	case STRING:
-		printf("STRING: %s\n", val->s);
+		printf("PUSH \"%s\"\n", val->s);
 		break;
 	case PROG:
 		puts("STARTPROG");
@@ -164,7 +145,7 @@ void printprog(stkProg program) {
 		puts("ENDPROG");
 		break;
 	case FN:
-		printf("FN: %s\n", val->s);
+		printf("CALL %s\n", val->s);
 		break;
 	}
 }
@@ -323,9 +304,29 @@ void print(stk* stack) {
 		puts("-- prog --");
 		break;
 	case FN:
-		puts("-- fn --");
+		printf("-- fn: %s --", val->s);
 		break;
 	}
+}
+
+void printstack(stk* stack) {
+	stkVal* v = stack->data;
+	for(; v->type != END; v--)
+	switch(v->type) {
+	case NUMBER:
+		printf("%f\n", v->n);
+		break;
+	case STRING:
+		puts(v->s);
+		break;
+	case PROG:
+		puts("-- prog --");
+		break;
+	case FN:
+		printf("-- fn: %s --", v->s);
+		break;
+	}
+	puts("-- end --");
 }
 
 void pop(stk* stack) {
@@ -379,6 +380,27 @@ void find(stk* stack) {
 	int idx = (int) popnum(stack);
 	/* TODO: chequear no salirse del stack */
 	push(*(stack->data - idx), stack);
+}
+
+void roll(stk* stack) {
+	int amount = (int) popnum(stack);
+	int length = (int) popnum(stack);
+	int i = 0;
+	stkVal temp = *stack->data;
+
+	amount = amount % length;
+
+	if(amount < 0) amount += length;
+	if(amount == 0) return;
+
+	for(; i < length; i++)
+		*(stack->data - i) = *(stack->data - (i + 1) % length);
+
+	*(stack->data - length + 1) = temp;
+
+	push(NUM(length), stack);
+	push(NUM(amount - 1), stack);
+	roll(stack);
 }
 
 void add(stk* stack) {

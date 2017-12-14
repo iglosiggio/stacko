@@ -348,14 +348,9 @@ void stackoif(stk* stack) {
 
 void stackoifelse(stk* stack) {
 	double cond = popnum(stack);
-	if(cond) {
-		pop(stack);
-		exec(stack);
-	}
-	else {
-		exec(stack);
-		pop(stack);
-	}
+	stkProg onfalse = popprog(stack);
+	stkProg ontrue = popprog(stack);
+	interpret(cond ? ontrue : onfalse, stack);
 }
 
 void exec(stk* stack) {

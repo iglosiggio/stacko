@@ -10,3 +10,5 @@ clean:
 
 test: stacko
 	./stacko "{ 1 - dup print \"hola!!\" print 1 find 1 find {exec} exch if } dup 7 exch exec"
+	echo "PROGRAMA DE PRUEBA QUE IMPRIME 4 VECES HOLA E IMPLEMENTA REPEAT!"
+	./stacko "{ 1 - 1 find 1 find {exec 2 find exec} {pop pop} 3 -1 roll ifelse } dup {\"hola\" print} 5 3 -1 roll exec"

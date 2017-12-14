@@ -57,6 +57,7 @@ void printstack(stk*);
 void halt(stk*);
 void stackoif(stk*);
 void stackoifelse(stk*);
+void times(stk*);
 void exec(stk*);
 void dup(stk*);
 void exch(stk*);
@@ -81,6 +82,7 @@ stkFun libstacko[] = {
 	{ "halt",                   halt },
 	{ "if",                 stackoif },
 	{ "ifelse",         stackoifelse },
+	{ "times",                 times },
 	{ "exec",                   exec },
 	{ "dup",                     dup },
 	{ "exch",                   exch },
@@ -351,6 +353,13 @@ void stackoifelse(stk* stack) {
 	stkProg onfalse = popprog(stack);
 	stkProg ontrue = popprog(stack);
 	interpret(cond ? ontrue : onfalse, stack);
+}
+
+void times(stk* stack) {
+	int times = (int) popnum(stack);
+	int i = 0;
+	stkProg body = popprog(stack);
+	for(; i < times; i++) interpret(body, stack);
 }
 
 void exec(stk* stack) {

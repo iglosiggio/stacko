@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 struct stack {
 	void* end;
@@ -54,6 +55,7 @@ void clear(stk*);
 void length(stk*);
 void print(stk*);
 void printstack(stk*);
+void read(stk*);
 void halt(stk*);
 void stackoif(stk*);
 void stackoifelse(stk*);
@@ -66,6 +68,8 @@ void roll(stk*);
 void add(stk*);
 void substract(stk*);
 void equal(stk*);
+void stackoremainder(stk*);
+void tonumber(stk*);
 
 stkProg progalloc(const char*);
 stkVal* valalloc(stkProg*);
@@ -79,6 +83,7 @@ stkFun libstacko[] = {
 	{ "length",               length },
 	{ "print",                 print },
 	{ "stack",            printstack },
+	{ "read",                   read },
 	{ "halt",                   halt },
 	{ "if",                 stackoif },
 	{ "ifelse",         stackoifelse },
@@ -91,6 +96,8 @@ stkFun libstacko[] = {
 	{ "+",                       add },
 	{ "-",                 substract },
 	{ "=",                     equal },
+	{ "%",           stackoremainder },
+	{ "tonumber",           tonumber },
 	{ NULL }
 };
 
@@ -274,6 +281,12 @@ double popnum(stk* stack) {
 	return v.n;
 }
 
+const char* popstr(stk* stack) {
+	stkVal v = popval(stack);
+	if(v.type != STRING) die("Erroro, stringo expectedo");
+	return v.s;
+}
+
 stkProg popprog(stk* stack) {
 	stkVal v = popval(stack);
 	if(v.type != PROG) die("Erroro, programo expectedo");
@@ -331,6 +344,13 @@ void printstack(stk* stack) {
 	puts("-- end --");
 }
 
+void read(stk* stack) {
+	/* TODO: encontrar una estrtegia para limpiarlos */
+	char* str = malloc(512);
+	fread(str, sizeof(char), 512, stdin);
+	push(STR(str), stack);
+}
+
 void pop(stk* stack) {
 	stack->data--;
 }
@@ -346,6 +366,7 @@ void halt(stk* stack) {
 void stackoif(stk* stack) {
 	double cond = popnum(stack);
 	if(cond) exec(stack);
+	else pop(stack);
 }
 
 void stackoifelse(stk* stack) {
@@ -423,6 +444,19 @@ void equal(stk* stack) {
 	double a = popnum(stack);
 	double b = popnum(stack);
 	push(NUM(a==b), stack);
+}
+
+void stackoremainder(stk* stack) {
+	int q = (int) popnum(stack);
+	int d = (int) popnum(stack);
+	push(NUM(d % q), stack);
+}
+
+void tonumber(stk* stack) {
+	const char* str = popstr(stack);
+	char* end;
+	double n = strtod(str, &end);
+	push(NUM(str == end ? NAN : n), stack);
 }
 
 /*

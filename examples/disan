@@ -1,0 +1,6 @@
+0 {
+	1 +
+	{dup print "is even" print}
+	{dup print "is odd" print}
+	2 find ifelse
+} read tonumber times

@@ -1,0 +1,18 @@
+
+"
+ You can define variables in stacko using the function `def`
+" pop
+
+{
+	"~~~~~~~" print
+	          print
+	"~~~~~~~" print
+} "decorate" def
+
+3.14159265 "pi" def
+
+"Ignacio Losiggio" "myname" def
+
+"Mi nombre es: " myname exch print print
+
+"El perímetro del círculo unitario es: " pi pi + decorate

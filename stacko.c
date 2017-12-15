@@ -6,11 +6,9 @@
 struct stack {
 	void* end;
 	struct stackValue* data;
-};
-
-struct internalFunction {
-	const char* name;
-	void (*fn)(struct stack*);
+	struct definition* defs;
+	struct definition* lastdef;
+	struct definition* enddefs;
 };
 
 struct program {
@@ -28,21 +26,25 @@ struct stackValue {
 		void (*fn)(struct stack*);
 	};
 	enum {
-		NUMBER, STRING, PROG, FN, END
+		NUMBER, STRING, PROG, FN, IFN, PFN, END
 	} type;
 };
 
+struct definition {
+	const char* name;
+	struct stackValue val;
+};
 
 typedef struct stack stk;
 typedef struct program stkProg;
 typedef struct stackValue stkVal;
-typedef struct internalFunction stkFun;
+typedef struct definition stkDef;
 
 void interpret(stkProg, stk*);
 void push(stkVal, stk*);
 void printprog(stkProg);
 
-stkFun* findsymbol(const char*);
+const stkVal findsymbol(const char*, const stk*);
 
 stkProg parse(const char*, stkProg);
 
@@ -70,47 +72,51 @@ void substract(stk*);
 void equal(stk*);
 void stackoremainder(stk*);
 void tonumber(stk*);
+void def(stk*);
 
 stkProg progalloc(const char*);
 stkVal* valalloc(stkProg*);
 void* heapalloc(stkProg*, size_t);
 stkProg heapprogalloc(stkProg*, const char*);
-stk stkalloc(size_t);
-
-const stkFun libstacko[] = {
-	/*exposed name   internal symbol*/
-	{ "pop",                     pop },
-	{ "clear",                 clear },
-	{ "length",               length },
-	{ "print",                 print },
-	{ "stack",            printstack },
-	{ "read",                   read },
-	{ "halt",                   halt },
-	{ "if",                 stackoif },
-	{ "ifelse",         stackoifelse },
-	{ "times",                 times },
-	{ "exec",                   exec },
-	{ "dup",                     dup },
-	{ "exch",                   exch },
-	{ "find",                   find },
-	{ "roll",                   roll },
-	{ "+",                       add },
-	{ "-",                 substract },
-	{ "=",                     equal },
-	{ "%",           stackoremainder },
-	{ "tonumber",           tonumber },
-	{ NULL }
-};
+stk stkalloc(size_t, size_t);
 
 /* TODO: usar el field .fn */
-#define FN(val)   (stkVal) { .type = FN,     .s = (val) }
-#define NUM(val)  (stkVal) { .type = NUMBER, .n = (val) }
-#define STR(val)  (stkVal) { .type = STRING, .s = (val) }
-#define PROG(val) (stkVal) { .type = PROG,   .p = (val) }
+#define FN(val)   (stkVal) { .type = FN,     .s  = (val) }
+#define IFN(val)  (stkVal) { .type = IFN,    .fn = (val) }
+#define PFN(val)  (stkVal) { .type = IFN,    .p  = (val) }
+#define NUM(val)  (stkVal) { .type = NUMBER, .n  = (val) }
+#define STR(val)  (stkVal) { .type = STRING, .s  = (val) }
+#define PROG(val) (stkVal) { .type = PROG,   .p  = (val) }
 #define END()     (stkVal) { .type = END }
 
 #define NULLPROG (stkProg) { NULL }
 #define ISNULLPROG(prog) (prog).start == NULL
+
+const stkDef libstacko[] = {
+	/*exposed name    value                */
+	{ "pop",          IFN(pop)             },
+	{ "clear",        IFN(clear)           },
+	{ "length",       IFN(length)          },
+	{ "print",        IFN(print)           },
+	{ "stack",        IFN(printstack)      },
+	{ "read",         IFN(read)            },
+	{ "halt",         IFN(halt)            },
+	{ "if",           IFN(stackoif)        },
+	{ "ifelse",       IFN(stackoifelse)    },
+	{ "times",        IFN(times)           },
+	{ "exec",         IFN(exec)            },
+	{ "dup",          IFN(dup)             },
+	{ "exch",         IFN(exch)            },
+	{ "find",         IFN(find)            },
+	{ "roll",         IFN(roll)            },
+	{ "+",            IFN(add)             },
+	{ "-",            IFN(substract)       },
+	{ "=",            IFN(equal)           },
+	{ "%",            IFN(stackoremainder) },
+	{ "tonumber",     IFN(tonumber)        },
+	{ "def",          IFN(def)             },
+	{ NULL }
+};
 
 int main(int argc, const char* argv[]) {
 	stk stack;
@@ -135,7 +141,7 @@ int main(int argc, const char* argv[]) {
 	puts("-----------------");
 	puts("PROGRAM EXECUTION");
 	puts("-----------------");
-	stack = stkalloc(2048);
+	stack = stkalloc(2048, 1024);
 	interpret(program, &stack);
 	puts("");
 
@@ -253,10 +259,22 @@ char* findendqcode(const char* sptr) {
 
 void interpret(stkProg program, stk* stack) {	
 	stkVal* val = program.start;
+	stkVal symbol;
 	for(; val != program.lastval; val++)
 	switch(val->type) {
 	case FN:
-		findsymbol(val->s)->fn(stack);
+		symbol = findsymbol(val->s, stack);
+		switch(symbol.type) {
+		case IFN:
+			symbol.fn(stack);
+			break;
+		case PFN:
+			interpret(symbol.p, stack);
+			break;
+		default:
+			push(symbol, stack);
+			break;
+		}
 		break;
 	default:
 		push(*val, stack);
@@ -264,10 +282,13 @@ void interpret(stkProg program, stk* stack) {
 	}
 }
 
-stkFun* findsymbol(const char* symbol) {
-	stkFun* f = libstacko;
-	for(; f->name != NULL; f++)
-		if(strcmp(f->name, symbol) == 0) return f;
+const stkVal findsymbol(const char* symbol, const stk* stack) {
+	const stkDef* v = stack->defs;
+	for(; v <= stack->lastdef; v++)
+		if(strcmp(v->name, symbol) == 0) return v->val;
+	v = libstacko;
+	for(; v->name != NULL; v++)
+		if(strcmp(v->name, symbol) == 0) return v->val;
 	die("Erroro while executing programo, function not found");
 }
 
@@ -343,7 +364,7 @@ void printstack(stk* stack) {
 		puts("-- prog --");
 		break;
 	case FN:
-		printf("-- fn: %s --", v->s);
+		printf("-- fn: %s --\n", v->s);
 		break;
 	}
 	puts("-- end --");
@@ -464,6 +485,24 @@ void tonumber(stk* stack) {
 	push(NUM(str == end ? NAN : n), stack);
 }
 
+void def(stk* stack) {
+	const char* name = popstr(stack);
+	stkVal val = popval(stack);
+	stkDef* def = stack->defs;
+
+	/* If the value if a program we mark it as executable */
+	if(val.type == PROG) val.type = PFN;
+
+	for(; def <= stack->lastdef; def++)
+		if(def->name && strcmp(def->name, name) == 0)
+			def->val = val;
+	if(def >= stack->enddefs)
+		die("Erroro, stacko out of defslots");
+	def->name = name;
+	def->val = val;
+	stack->lastdef = def;
+}
+
 /*
  * Library things
  */
@@ -496,11 +535,15 @@ stkProg heapprogalloc(stkProg* program, const char* source) {
 	return (stkProg) { .start = mem, .lastval = mem, .end = mem+size, .cheap = mem+size };
 }
 
-stk stkalloc(size_t values) {
+stk stkalloc(size_t values, size_t definitions) {
 	stk stack;
-	size_t allocsiz = sizeof(stkVal) * values;
-	stack.data = malloc(allocsiz);
-	stack.end = stack.data + allocsiz;
+	size_t valuesiz = sizeof(stkVal) * values;
+	size_t defsiz = sizeof(stkDef) * definitions;
+	stack.data = malloc(valuesiz + defsiz);
+	stack.defs = stack.end = stack.data + values;
+	stack.lastdef = stack.defs - 1;
+	stack.enddefs = stack.defs + definitions;
+	memset(stack.defs, 0, defsiz);
 	(*stack.data) = END();
 	return stack;
 }

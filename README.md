@@ -1,4 +1,4 @@
-# stacko - the useless stacklang
+# stacko - the useless, bug-ridden stacklang
 A stack-based toy language inspired by PostScript and [Nari](https://git.exactas.uba.ar/mdelrio/Nari3)
 
 **Documentation in progress**

@@ -494,8 +494,10 @@ void def(stk* stack) {
 	if(val.type == PROG) val.type = PFN;
 
 	for(; def <= stack->lastdef; def++)
-		if(def->name && strcmp(def->name, name) == 0)
+		if(def->name && strcmp(def->name, name) == 0) {
 			def->val = val;
+			return;
+		}
 	if(def >= stack->enddefs)
 		die("Erroro, stacko out of defslots");
 	def->name = name;

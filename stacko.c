@@ -12,10 +12,12 @@ struct stack {
 };
 
 struct program {
-	struct stackValue* start;
-	void* end;
-	struct stackValue* lastval;
-	void* cheap;
+	struct stackValue* prog_start;
+	struct stackValue* prog_pastlast;
+	struct stackValue* prog_end;
+	void* heap_start;
+	void* heap_pastlast;
+	void* heap_end;
 };
 
 struct stackValue {
@@ -74,10 +76,9 @@ void stackoremainder(stk*);
 void tonumber(stk*);
 void def(stk*);
 
-stkProg progalloc(const char*);
+stkProg progalloc();
 stkVal* valalloc(stkProg*);
 void* heapalloc(stkProg*, size_t);
-stkProg heapprogalloc(stkProg*, const char*);
 stk stkalloc(size_t, size_t);
 
 /* TODO: usar el field .fn */
@@ -90,7 +91,7 @@ stk stkalloc(size_t, size_t);
 #define END()     (stkVal) { .type = END }
 
 #define NULLPROG (stkProg) { NULL }
-#define ISNULLPROG(prog) (prog).start == NULL
+#define ISNULLPROG(prog) (prog).prog_start == NULL
 
 const stkDef libstacko[] = {
 	/*exposed name    value                */
@@ -118,9 +119,33 @@ const stkDef libstacko[] = {
 	{ NULL }
 };
 
+char* file_to_str(const char* filename) {
+	FILE* file;
+	size_t buf_size;
+	char* buf;
+
+	file  = fopen(filename, "r");
+	if (file == NULL)
+		return NULL;
+
+	fseek(file, 0L, SEEK_END);
+	buf_size = ftell(file);
+	rewind(file);
+
+	buf = malloc(buf_size);
+	if (buf == NULL)
+		return NULL;
+
+	fread(buf, buf_size, 1, file);
+
+	fclose(file);
+	return buf;
+}
+
 int main(int argc, const char* argv[]) {
 	stk stack;
 	stkProg program;
+	char* program_source;
 
 	if(argc < 1) {
 		puts("No programo given");
@@ -130,12 +155,13 @@ int main(int argc, const char* argv[]) {
 	puts("-----------------");
 	puts("     PROGRAM     ");
 	puts("-----------------");
-	puts(argv[1]);
+	program_source = file_to_str(argv[1]);
+	puts(program_source);
 	puts("");
 	puts("-----------------");
 	puts("     PARSING     ");
 	puts("-----------------");
-	program = parse(argv[1], NULLPROG);
+	program = parse(program_source, NULLPROG);
 	printprog(program);
 	puts("");
 	puts("-----------------");
@@ -149,8 +175,8 @@ int main(int argc, const char* argv[]) {
 }
 
 void printprog(stkProg program) {
-	stkVal* val = program.start;
-	for(; val != program.lastval; val++)
+	stkVal* val = program.prog_start;
+	for(; val != program.prog_pastlast; val++)
 	switch(val->type) {
 	case NUMBER:
 		printf("PUSH %f\n", val->n);
@@ -172,7 +198,7 @@ void printprog(stkProg program) {
 stkProg parse(const char* source, stkProg prog) {
 	const char* parsing = source;
 	if(ISNULLPROG(prog))
-		prog = progalloc(source);
+		prog = progalloc();
 
 	while(*parsing != '\0') {
 		double num;
@@ -201,7 +227,7 @@ stkProg parse(const char* source, stkProg prog) {
 			memcpy(progstr, parsing+1, progsiz);
 			progstr[progsiz] = '\0';
 			parsing = parsed + 1;
-			*valalloc(&prog) = PROG(parse(progstr, heapprogalloc(&prog, progstr)));
+			*valalloc(&prog) = PROG(parse(progstr, progalloc(&prog, progstr)));
 			continue;
 		}
 		if(*parsing == ' '
@@ -258,9 +284,9 @@ char* findendqcode(const char* sptr) {
 }
 
 void interpret(stkProg program, stk* stack) {	
-	stkVal* val = program.start;
+	stkVal* val = program.prog_start;
 	stkVal symbol;
-	for(; val != program.lastval; val++)
+	for(; val != program.prog_pastlast; val++)
 	switch(val->type) {
 	case FN:
 		symbol = findsymbol(val->s, stack);
@@ -515,26 +541,37 @@ void die(const char* msg) {
 	exit(-1);
 }
 
-stkProg progalloc(const char* program) {
-	/* Allocates the maximum amount of memory a stacko
-	 * program can need */
-	size_t size = (strlen(program) / 2 + 2) * sizeof(stkVal);
-	void* mem = malloc(size);
-	return (stkProg) { .start = mem, .lastval = mem, .end = mem+size, .cheap = mem+size };
+stkProg progalloc() {
+	size_t prog_size = 1024 * sizeof(stkVal);
+	size_t heap_size = 1024 * sizeof(stkVal);
+	void* prog_mem = malloc(prog_size);
+	void* heap_mem = malloc(heap_size);
+	return (stkProg) {
+		/* Program memory */
+		.prog_start    = prog_mem,
+		.prog_pastlast = prog_mem,
+		.prog_end      = prog_mem + prog_size,
+		/* Program heap */
+		.heap_start    = heap_mem,
+		.heap_pastlast = heap_mem,
+		.heap_end      = heap_mem + heap_size
+	};
 }
 
 stkVal* valalloc(stkProg* program) {
-	return (program->lastval)++;
+	if (program->prog_pastlast + 1 <= program->prog_end)
+		return (program->prog_pastlast)++;
+
+	die("valalloc: Out of space for stkVal");
 }
 
 void* heapalloc(stkProg* program, size_t size) {
-	return program->cheap = program->cheap - size;
-}
-
-stkProg heapprogalloc(stkProg* program, const char* source) {
-	size_t size = (strlen(source) / 2 + 2) * sizeof(stkVal);
-	void* mem = heapalloc(program, size);
-	return (stkProg) { .start = mem, .lastval = mem, .end = mem+size, .cheap = mem+size };
+	if (program->heap_pastlast + size <= program->heap_end) {
+		void* rval = program->heap_pastlast;
+		program->heap_pastlast += size;
+		return rval;
+	}
+	die("heapalloc: Out of memory for the current program");
 }
 
 stk stkalloc(size_t values, size_t definitions) {

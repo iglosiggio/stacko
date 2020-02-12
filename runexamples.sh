@@ -1,5 +1,5 @@
 #!/bin/bash
 for FILE in `ls examples`; do
 	echo "RUNNING EXAMPLE $FILE"
-	./stacko "`cat examples/$FILE`"
+	./stacko "examples/$FILE"
 done

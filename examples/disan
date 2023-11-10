@@ -2,5 +2,5 @@
 	1 +
 	{dup print "is even" print}
 	{dup print "is odd" print}
-	2 find ifelse
+	2 find 2 % ifelse
 } read tonumber times

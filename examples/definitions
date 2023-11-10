@@ -13,6 +13,9 @@
 
 "Ignacio Losiggio" "myname" def
 
-"Mi nombre es: " myname exch print print
+"Mi nombre es: " print
+myname print
 
-"El perímetro del círculo unitario es: " pi pi + decorate
+"" print
+"El perímetro del círculo unitario es: " print
+pi pi + decorate

@@ -3,6 +3,8 @@
 # the useless stacklang
 #
 
+CFLAGS += -std=c2x
+
 all: stacko
 
 clean:

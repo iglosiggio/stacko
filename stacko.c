@@ -50,6 +50,7 @@ const stkVal findsymbol(const char*, const stk*);
 
 stkProg parse(const char*, stkProg);
 
+[[noreturn]]
 void die(const char*);
 char* findendqstr(const char*);
 char* findendqcode(const char* sptr);
@@ -192,6 +193,10 @@ void printprog(stkProg program) {
 	case FN:
 		printf("CALL %s\n", val->s);
 		break;
+	case IFN:
+	case PFN:
+	case END:
+		/* Do nothing, we don't print these */
 	}
 }
 
@@ -227,7 +232,7 @@ stkProg parse(const char* source, stkProg prog) {
 			memcpy(progstr, parsing+1, progsiz);
 			progstr[progsiz] = '\0';
 			parsing = parsed + 1;
-			*valalloc(&prog) = PROG(parse(progstr, progalloc(&prog, progstr)));
+			*valalloc(&prog) = PROG(parse(progstr, progalloc()));
 			continue;
 		}
 		if(*parsing == ' '
@@ -263,9 +268,10 @@ char* findendqstr(const char* sptr) {
 	if(*sptr == '"')
 	for(sptr++; *sptr != '\0'; sptr++) {
 		if(*sptr == '"') return (char*) sptr;
-		if(*sptr == '\\')
+		if(*sptr == '\\') {
 			if(*(sptr+1) == '\0') break;
 			else sptr++;
+		}
 	}
 	else return (char*) sptr;
 
@@ -373,6 +379,10 @@ void print(stk* stack) {
 	case FN:
 		printf("-- fn: %s --", val->s);
 		break;
+	case IFN:
+	case PFN:
+	case END:
+		die("Unexpected value type");
 	}
 }
 
@@ -392,6 +402,10 @@ void printstack(stk* stack) {
 	case FN:
 		printf("-- fn: %s --\n", v->s);
 		break;
+	case IFN:
+	case PFN:
+	case END:
+		die("Unexpected value type");
 	}
 	puts("-- end --");
 }
@@ -535,6 +549,7 @@ void def(stk* stack) {
  * Library things
  */
 
+[[noreturn]]
 void die(const char* msg) {
 	fputs(msg, stderr);
 	fputc('\n', stderr);
